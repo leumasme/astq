@@ -1,0 +1,57 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        registry-url: 'https://registry.npmjs.org'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Build
+      run: npm run build
+    
+    - name: Run tests
+      run: npm test
+    
+    - name: Extract release notes
+      id: extract_release_notes
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/v}
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        # Extract release notes from CHANGES_SUMMARY.md if it exists
+        if grep -q "## Version $VERSION" CHANGES_SUMMARY.md; then
+          sed -n "/## Version $VERSION/,/## Version/p" CHANGES_SUMMARY.md | sed '1!{/## Version/q}' | sed '1d' > RELEASE_NOTES.md
+        else
+          echo "Release $VERSION" > RELEASE_NOTES.md
+        fi
+    
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        name: Release v${{ steps.extract_release_notes.outputs.version }}
+        body_path: RELEASE_NOTES.md
+        files: |
+          dist/*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Publish to NPM
+      run: npm publish
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
