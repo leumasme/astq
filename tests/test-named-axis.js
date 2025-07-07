@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
-const { default: ASTQ } = require("./dist/astq.cjs");
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+const { default: ASTQ } = require("../dist/astq.cjs");
 
 // Create a custom adapter that supports named axes like the issue describes
 class TestAdapter {

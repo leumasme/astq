@@ -33,7 +33,7 @@ chai.config.includeStack = true;
 
 import { createRequire } from "module";
 const require = createRequire(import.meta.url);
-const { default: ASTQ } = require("./dist/astq.cjs");
+const { default: ASTQ } = require("../dist/astq.cjs");
 
 describe("ASTq Axis Context", function () {
     const astq = new ASTQ()

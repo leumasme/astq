@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
-const { default: ASTQ } = require("./dist/astq.cjs");
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+const { default: ASTQ } = require("../dist/astq.cjs");
 const ASTY = require("asty");
 
 // Create a test AST similar to the existing tests but with named axes

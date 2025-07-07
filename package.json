@@ -58,7 +58,7 @@
     "scripts": {
         "build": "tsup",
         "dev": "tsup --watch",
-        "test": "mocha tst/astq.js",
+        "test": "mocha tests/astq.js tests/test-axis-context.js",
         "lint": "eslint src/**/*.ts",
         "lint:fix": "eslint src/**/*.ts --fix",
         "clean": "rm -rf dist",
