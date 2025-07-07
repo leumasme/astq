@@ -22,6 +22,7 @@
 **  SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
+import util from "./astq-util.js";
 import { ASTQAdapterInterface, ASTQParams } from "./astq.js";
 import ASTQFuncs from "./astq-funcs.js";
 import ASTQQueryTrace from "./astq-query-trace.js";
@@ -44,9 +45,9 @@ export default class ASTQQueryExec extends ASTQQueryTrace {
         this.traceBegin(Q, T);
         let output: any[] = [];
 
-        // Iterate over all query paths
-        Q.childs().forEach((queryPath: any) => {
-            output = output.concat(this.execPath(queryPath, T));
+        // iterate over all query paths
+        Q.childs().forEach((Q: any) => {
+            output = output.concat(this.execPath(Q, T));
         });
 
         this.traceEnd(Q, T, output);
@@ -54,8 +55,437 @@ export default class ASTQQueryExec extends ASTQQueryTrace {
     }
 
     execPath(Q: any, T: any): any[] {
-        // Simplified implementation - this would need the full logic from the original file
-        // For now, just return the input node to make it functional
-        return [T];
+        this.traceBegin(Q, T);
+        let nodes = [T];
+        let result: any[] = [];
+        let resultExplicit = false;
+
+        // iterate over all steps of a query path
+        Q.childs().forEach((Q: any) => {
+            let output: any[] = [];
+            nodes.forEach((T: any) => {
+                output = output.concat(this.execStep(Q, T));
+            });
+            nodes = output;
+            if (Q.get("isResult")) {
+                resultExplicit = true;
+                result = result.concat(nodes);
+            }
+        });
+
+        this.traceEnd(Q, T, nodes);
+        return resultExplicit ? result : nodes;
+    }
+
+    execStep(Q: any, T: any): any[] {
+        this.traceBegin(Q, T);
+
+        // determine (optional) axis, (mandatory) match and (optional) filter
+        let childs = Q.childs();
+        let axis: any = null;
+        let match: any = null;
+        let filter: any = null;
+        let i = 0;
+        if (i < childs.length && childs[i].type() === "Axis")
+            axis = childs[i++];
+        if (i < childs.length && childs[i].type() === "Match")
+            match = childs[i++];
+        if (i < childs.length && childs[i].type() === "Filter")
+            filter = childs[i++];
+        if (match === null)
+            throw new Error("no matching part in query step");
+
+        let nodes: any[] = [];
+
+        // helper function for matching and taking node
+        let id = match.get("id");
+        let matchAndTake = (T: any) => {
+            let type = this.adapter.getNodeType(T);
+            if (id === "*" || id === type) {
+                let take = true;
+                if (filter !== null)
+                    if (!this.execFilter(filter, T))
+                        take = false;
+                if (take)
+                    nodes.push(T);
+            }
+        };
+
+        // determine nodes along axis which potentially might match
+        if (axis !== null) {
+            let op = axis.get("op");
+            let t = axis.get("type");
+            if (op === "/") {
+                // direct child nodes
+                this.adapter.getChildNodes(T, t).forEach((T: any) => matchAndTake(T));
+            }
+            else if (op === "//") {
+                // transitive child nodes
+                let walk = (T: any) => {
+                    matchAndTake(T);
+                    this.adapter.getChildNodes(T, t).forEach((T: any) => walk(T)); /* RECURSION */
+                };
+                this.adapter.getChildNodes(T, t).forEach((T: any) => walk(T));
+            }
+            else if (op === "./") {
+                // current node plus direct child nodes
+                matchAndTake(T);
+                this.adapter.getChildNodes(T, t).forEach((T: any) => matchAndTake(T));
+            }
+            else if (op === ".//") {
+                // current node plus transitive child nodes
+                matchAndTake(T);
+                let walk = (T: any) => {
+                    matchAndTake(T);
+                    this.adapter.getChildNodes(T, t).forEach((T: any) => walk(T)); /* RECURSION */
+                };
+                this.adapter.getChildNodes(T, t).forEach((T: any) => walk(T));
+            }
+            else if (op === "-/") {
+                // direct left sibling
+                let parent = this.adapter.getParentNode(T, "*");
+                if (parent !== null) {
+                    let pchilds = this.adapter.getChildNodes(parent, t);
+                    let leftSibling = null;
+                    for (let i = 0; i < pchilds.length; i++) {
+                        if (pchilds[i] === T)
+                            break;
+                        leftSibling = pchilds[i];
+                    }
+                    if (leftSibling !== null)
+                        matchAndTake(leftSibling);
+                }
+            }
+            else if (op === "-//") {
+                // transitive left siblings
+                let parent = this.adapter.getParentNode(T, "*");
+                if (parent !== null) {
+                    let pchilds = this.adapter.getChildNodes(parent, t);
+                    let i = 0;
+                    for (; i < pchilds.length; i++)
+                        if (pchilds[i] === T)
+                            break;
+                    for (i--; i >= 0; i--)
+                        matchAndTake(pchilds[i]);
+                }
+            }
+            else if (op === "+/") {
+                // direct right sibling
+                let parent = this.adapter.getParentNode(T, "*");
+                if (parent !== null) {
+                    let pchilds = this.adapter.getChildNodes(parent, t);
+                    let i;
+                    for (i = 0; i < pchilds.length; i++)
+                        if (pchilds[i] === T)
+                            break;
+                    if (i < pchilds.length)
+                        matchAndTake(pchilds[++i]);
+                }
+            }
+            else if (op === "+//") {
+                // transitive right siblings
+                let parent = this.adapter.getParentNode(T, "*");
+                if (parent !== null) {
+                    let pchilds = this.adapter.getChildNodes(parent, t);
+                    let i;
+                    for (i = 0; i < pchilds.length; i++)
+                        if (pchilds[i] === T)
+                            break;
+                    if (i < pchilds.length)
+                        for (i++; i < pchilds.length; i++)
+                            matchAndTake(pchilds[i]);
+                }
+            }
+            else if (op === "~/") {
+                // direct left and right sibling
+                let parent = this.adapter.getParentNode(T, "*");
+                if (parent !== null) {
+                    let pchilds = this.adapter.getChildNodes(parent, t);
+                    let i;
+                    for (i = 0; i < pchilds.length; i++)
+                        if (pchilds[i] === T)
+                            break;
+                    if (i > 0)
+                        matchAndTake(pchilds[i - 1]);
+                    if (i < pchilds.length - 1)
+                        matchAndTake(pchilds[i + 1]);
+                }
+            }
+            else if (op === "~//") {
+                // transitive left and right siblings
+                let parent = this.adapter.getParentNode(T, "*");
+                if (parent !== null) {
+                    let pchilds = this.adapter.getChildNodes(parent, t);
+                    for (let i = 0; i < pchilds.length; i++)
+                        if (pchilds[i] !== T)
+                            matchAndTake(pchilds[i]);
+                }
+            }
+            else if (op === "../") {
+                // direct parent
+                let parent = this.adapter.getParentNode(T, t);
+                if (parent !== null)
+                    matchAndTake(parent);
+            }
+            else if (op === "..//") {
+                // transitive parents
+                let node = T;
+                for (;;) {
+                    let parent = this.adapter.getParentNode(node, t);
+                    if (parent === null)
+                        break;
+                    matchAndTake(parent);
+                    node = parent;
+                }
+            }
+            else if (op === "<//") {
+                // transitive preceding nodes
+                let ctx = { sentinel: T, take: true };
+                for (;;) {
+                    let parent = this.adapter.getParentNode(T, "*");
+                    if (parent === null)
+                        break;
+                    T = parent;
+                }
+                let walk = (T: any) => {
+                    if (T === ctx.sentinel)
+                        ctx.take = false;
+                    if (ctx.take)
+                        matchAndTake(T);
+                    if (ctx.take)
+                        this.adapter.getChildNodes(T, t).forEach((T: any) => walk(T)); /* RECURSION */
+                };
+                if (T !== ctx.sentinel) {
+                    matchAndTake(T);
+                    this.adapter.getChildNodes(T, t).forEach((T: any) => walk(T));
+                }
+                nodes = nodes.reverse();
+            }
+            else if (op === ">//") {
+                // transitive following nodes
+                let ctx = { sentinel: T, take: false };
+                for (;;) {
+                    let parent = this.adapter.getParentNode(T, "*");
+                    if (parent === null)
+                        break;
+                    T = parent;
+                }
+                let walk = (T: any) => {
+                    if (ctx.take)
+                        matchAndTake(T);
+                    if (T === ctx.sentinel)
+                        ctx.take = true;
+                    this.adapter.getChildNodes(T, t).forEach((T: any) => walk(T)); /* RECURSION */
+                };
+                this.adapter.getChildNodes(T, t).forEach((T: any) => walk(T));
+            }
+        }
+        else
+            // current node
+            matchAndTake(T);
+
+        this.traceEnd(Q, T, nodes);
+        return nodes;
+    }
+
+    execFilter(Q: any, T: any): boolean {
+        this.traceBegin(Q, T);
+        let expr = Q.childs()[0];
+        let result = this.execExpr(expr, T);
+        result = util.truthy(result);
+        this.traceEnd(Q, T, result);
+        return result;
+    }
+
+    execExpr(Q: any, T: any): any {
+        switch (Q.type()) {
+            case "ConditionalBinary":  return this.execExprConditionalBinary(Q, T);
+            case "ConditionalTernary": return this.execExprConditionalTernary(Q, T);
+            case "Logical":            return this.execExprLogical(Q, T);
+            case "Bitwise":            return this.execExprBitwise(Q, T);
+            case "Relational":         return this.execExprRelational(Q, T);
+            case "Arithmetical":       return this.execExprArithmetical(Q, T);
+            case "Unary":              return this.execExprUnary(Q, T);
+            case "FuncCall":           return this.execExprFuncCall(Q, T);
+            case "Attribute":          return this.execExprAttribute(Q, T);
+            case "Param":              return this.execExprParam(Q, T);
+            case "LiteralString":      return this.execExprLiteralString(Q, T);
+            case "LiteralRegExp":      return this.execExprLiteralRegExp(Q, T);
+            case "LiteralNumber":      return this.execExprLiteralNumber(Q, T);
+            case "LiteralValue":       return this.execExprLiteralValue(Q, T);
+            case "Path":               return this.execExprPath(Q, T);
+        }
+    }
+
+    execExprConditionalBinary(Q: any, T: any): any {
+        this.traceBegin(Q, T);
+        let result = this.execExpr(Q.childs()[0], T);
+        if (!util.truthy(result))
+            result = this.execExpr(Q.childs()[1], T);
+        this.traceEnd(Q, T, result);
+        return result;
+    }
+
+    execExprConditionalTernary(Q: any, T: any): any {
+        this.traceBegin(Q, T);
+        let result = this.execExpr(Q.childs()[0], T);
+        if (util.truthy(result))
+            result = this.execExpr(Q.childs()[1], T);
+        else
+            result = this.execExpr(Q.childs()[2], T);
+        this.traceEnd(Q, T, result);
+        return result;
+    }
+
+    execExprLogical(Q: any, T: any): boolean {
+        this.traceBegin(Q, T);
+        let result = false;
+        switch (Q.get("op")) {
+            case "&&":
+                result = util.truthy(this.execExpr(Q.childs()[0], T));
+                if (result)
+                    result = result && util.truthy(this.execExpr(Q.childs()[1], T));
+                break;
+            case "||":
+                result = util.truthy(this.execExpr(Q.childs()[0], T));
+                if (!result)
+                    result = result || util.truthy(this.execExpr(Q.childs()[1], T));
+                break;
+        }
+        this.traceEnd(Q, T, result);
+        return result;
+    }
+
+    execExprBitwise(Q: any, T: any): number {
+        this.traceBegin(Q, T);
+        let v1 = util.coerce(this.execExpr(Q.childs()[0], T), "number");
+        let v2 = util.coerce(this.execExpr(Q.childs()[1], T), "number");
+        let result: number;
+        switch (Q.get("op")) {
+            case "&":  result = v1 &  v2; break;
+            case "|":  result = v1 |  v2; break;
+            case "<<": result = v1 << v2; break;
+            case ">>": result = v1 >> v2; break;
+        }
+        this.traceEnd(Q, T, result);
+        return result;
+    }
+
+    execExprRelational(Q: any, T: any): boolean {
+        this.traceBegin(Q, T);
+        let v1 = this.execExpr(Q.childs()[0], T);
+        let v2 = this.execExpr(Q.childs()[1], T);
+        let result: boolean;
+        switch (Q.get("op")) {
+            case "==": result = v1 === v2; break;
+            case "!=": result = v1 !== v2; break;
+            case "<=": result = util.coerce(v1, "number") <= util.coerce(v2, "number"); break;
+            case ">=": result = util.coerce(v1, "number") >= util.coerce(v2, "number"); break;
+            case "<":  result = util.coerce(v1, "number") <  util.coerce(v2, "number"); break;
+            case ">":  result = util.coerce(v1, "number") >  util.coerce(v2, "number"); break;
+            case "=~": result = util.coerce(v1, "string").match(util.coerce(v2, "regexp")) !== null; break;
+            case "!~": result = util.coerce(v1, "string").match(util.coerce(v2, "regexp")) === null; break;
+        }
+        this.traceEnd(Q, T, result);
+        return result;
+    }
+
+    execExprArithmetical(Q: any, T: any): number | string {
+        this.traceBegin(Q, T);
+        let v1 = this.execExpr(Q.childs()[0], T);
+        let v2 = this.execExpr(Q.childs()[1], T);
+        let result: number | string;
+        switch (Q.get("op")) {
+            case "+":
+                if (typeof v1 === "string")
+                    result = v1 + util.coerce(v2, "string");
+                else
+                    result = util.coerce(v1, "number") + util.coerce(v2, "number");
+                break;
+            case "-":  result = util.coerce(v1, "number") - util.coerce(v2, "number"); break;
+            case "*":  result = util.coerce(v1, "number") * util.coerce(v2, "number"); break;
+            case "/":  result = util.coerce(v1, "number") / util.coerce(v2, "number"); break;
+            case "%":  result = util.coerce(v1, "number") % util.coerce(v2, "number"); break;
+            case "**": result = Math.pow(util.coerce(v1, "number"), util.coerce(v2, "number")); break;
+        }
+        this.traceEnd(Q, T, result);
+        return result;
+    }
+
+    execExprUnary(Q: any, T: any): boolean | number {
+        this.traceBegin(Q, T);
+        let v = this.execExpr(Q.childs()[0], T);
+        let result: boolean | number;
+        switch (Q.get("op")) {
+            case "!": result = !util.coerce(v, "boolean"); break;
+            case "~": result = ~util.coerce(v, "number");  break;
+        }
+        this.traceEnd(Q, T, result);
+        return result;
+    }
+
+    execExprFuncCall(Q: any, T: any): any {
+        this.traceBegin(Q, T);
+        let id = Q.get("id");
+        let args = [this.adapter, T];
+        Q.childs().forEach((Q: any) => {
+            args.push(this.execExpr(Q, T));
+        });
+        let result = this.funcs.run(id, args);
+        this.traceEnd(Q, T, result);
+        return result;
+    }
+
+    execExprAttribute(Q: any, T: any): any {
+        this.traceBegin(Q, T);
+        let id = Q.get("id");
+        let result = this.adapter.getNodeAttrValue(T, id);
+        this.traceEnd(Q, T, result);
+        return result;
+    }
+
+    execExprParam(Q: any, T: any): any {
+        this.traceBegin(Q, T);
+        let id = Q.get("id");
+        if (typeof this.params[id] === "undefined")
+            throw new Error("invalid parameter \"" + id + "\"");
+        let result = this.params[id];
+        this.traceEnd(Q, T, result);
+        return result;
+    }
+
+    execExprLiteralString(Q: any, T: any): string {
+        this.traceBegin(Q, T);
+        let result = Q.get("value");
+        this.traceEnd(Q, T, result);
+        return result;
+    }
+
+    execExprLiteralRegExp(Q: any, T: any): RegExp {
+        this.traceBegin(Q, T);
+        let result = Q.get("value");
+        this.traceEnd(Q, T, result);
+        return result;
+    }
+
+    execExprLiteralNumber(Q: any, T: any): number {
+        this.traceBegin(Q, T);
+        let result = Q.get("value");
+        this.traceEnd(Q, T, result);
+        return result;
+    }
+
+    execExprLiteralValue(Q: any, T: any): any {
+        this.traceBegin(Q, T);
+        let result = Q.get("value");
+        this.traceEnd(Q, T, result);
+        return result;
+    }
+
+    execExprPath(Q: any, T: any): any[] {
+        this.traceBegin(Q, T);
+        let result = this.execPath(Q, T);
+        this.traceEnd(Q, T, result);
+        return result;
     }
 }
