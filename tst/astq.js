@@ -27,11 +27,13 @@
 /* jshint -W030 */
 /* eslint no-unused-expressions: 0 */
 
-const chai = require("chai")
-const expect = chai.expect
-chai.config.includeStack = true
+import * as chai from "chai";
+const expect = chai.expect;
+chai.config.includeStack = true;
 
-const ASTQ = require("../lib/astq.node.js")
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+const { default: ASTQ } = require("../dist/astq.cjs");
 
 describe("ASTq Library", function () {
     const astq = new ASTQ()

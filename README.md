@@ -17,6 +17,30 @@ Installation
 $ npm install astq
 ```
 
+## Modern Build System
+
+This library has been modernized with:
+
+- **TypeScript**: Full TypeScript support with type definitions
+- **Modern Build Tools**: Uses `tsup` instead of Grunt/Browserify
+- **Multiple Output Formats**: ESM, CommonJS, and browser IIFE builds
+- **Modern JavaScript**: Updated to ES2020+ standards with proper formatting
+- **ESLint 8**: Modern linting with TypeScript support
+
+### Usage
+
+```javascript
+// ESM
+import ASTQ from "astq";
+
+// CommonJS
+const { default: ASTQ } = require("astq");
+
+// Browser (IIFE)
+// <script src="node_modules/astq/dist/astq.browser.js"></script>
+// const astq = new ASTQ();
+```
+
 About
 -----
 

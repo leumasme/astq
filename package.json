@@ -1,56 +1,67 @@
 {
-    "name":                       "astq",
-    "version":                    "2.8.1",
-    "description":                "Abstract Syntax Tree (AST) Query Engine",
-    "keywords":                   [ "abstract", "syntax", "tree", "query", "engine", "adaptable" ],
-    "license":                    "MIT",
-    "browser":                    "lib/astq.browser.js",
-    "main":                       "lib/astq.node.js",
+    "name": "astq",
+    "version": "2.8.1",
+    "description": "Abstract Syntax Tree (AST) Query Engine",
+    "keywords": ["abstract", "syntax", "tree", "query", "engine", "adaptable"],
+    "license": "MIT",
+    "type": "module",
+    "main": "dist/astq.js",
+    "module": "dist/astq.js",
+    "types": "dist/astq.d.ts",
+    "browser": "dist/astq.browser.js",
+    "exports": {
+        ".": {
+            "types": "./dist/astq.d.ts",
+            "browser": "./dist/astq.browser.js",
+            "import": "./dist/astq.js",
+            "require": "./dist/astq.cjs"
+        }
+    },
+    "files": [
+        "dist"
+    ],
     "repository": {
-        "type":                   "git",
-        "url":                    "git+https://github.com/rse/astq.git"
+        "type": "git",
+        "url": "git+https://github.com/rse/astq.git"
     },
     "author": {
-        "name":                   "Dr. Ralf S. Engelschall",
-        "email":                  "rse@engelschall.com",
-        "url":                    "http://engelschall.com"
+        "name": "Dr. Ralf S. Engelschall",
+        "email": "rse@engelschall.com",
+        "url": "http://engelschall.com"
     },
-    "homepage":                   "https://github.com/rse/astq",
-    "bugs":                       "https://github.com/rse/astq/issues",
+    "homepage": "https://github.com/rse/astq",
+    "bugs": "https://github.com/rse/astq/issues",
     "dependencies": {
-        "peggy":                  "4.0.2",
-        "pegjs-otf":              "2.0.2",
-        "pegjs-util":             "2.0.1",
-        "asty":                   "1.8.21",
-        "cache-lru":              "1.2.0"
+        "peggy": "4.0.2",
+        "pegjs-otf": "2.0.2",
+        "pegjs-util": "2.0.1",
+        "asty": "1.8.21",
+        "cache-lru": "1.2.0"
     },
     "devDependencies": {
-        "grunt":                  "1.6.1",
-        "grunt-cli":              "1.4.3",
-        "grunt-contrib-clean":    "2.0.1",
-        "grunt-browserify":       "6.0.0",
-        "grunt-mocha-test":       "0.13.3",
-        "grunt-eslint":           "24.3.0",
-        "@babel/core":            "7.24.0",
-        "eslint":                 "8.57.0",
-        "eslint-config-standard": "17.1.0",
-        "eslint-plugin-promise":  "6.1.1",
-        "eslint-plugin-import":   "2.29.1",
-        "eslint-plugin-node":     "11.1.0",
-        "mocha":                  "10.3.0",
-        "chai":                   "4.4.1",
-        "babelify":               "10.0.0",
-        "@babel/preset-env":      "7.24.0",
-        "uglifyify":              "5.0.2",
-        "browserify-header":      "1.1.0",
-        "browserify-derequire":   "1.1.1",
-        "browserify-replace":     "1.1.0"
+        "@types/node": "^20.14.10",
+        "typescript": "^5.5.3",
+        "tsup": "^8.1.0",
+        "eslint": "^8.57.0",
+        "@typescript-eslint/eslint-plugin": "^7.16.0",
+        "@typescript-eslint/parser": "^7.16.0",
+        "mocha": "^10.5.2",
+        "chai": "^5.1.1",
+        "@types/chai": "^4.3.16",
+        "@types/mocha": "^10.0.7",
+        "js-yaml": "^4.1.0",
+        "@types/js-yaml": "^4.0.9"
     },
     "engines": {
-        "node":                   ">=12.0.0"
+        "node": ">=18.0.0"
     },
     "scripts": {
-        "prepublishOnly":         "grunt default",
-        "build":                  "grunt default"
+        "build": "tsup",
+        "dev": "tsup --watch",
+        "test": "mocha tst/astq.js",
+        "lint": "eslint src/**/*.ts",
+        "lint:fix": "eslint src/**/*.ts --fix",
+        "clean": "rm -rf dist",
+        "prepublishOnly": "npm run clean && npm run build && npm run test"
     }
 }
