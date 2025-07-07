@@ -50,7 +50,7 @@ export default class ASTQAdapterCheerio implements ASTQAdapterInterface {
         );
     }
 
-    static getParentNode(node: CheerioNode, type?: string): CheerioNode | undefined {
+    static getParentNode(node: CheerioNode): CheerioNode | undefined {
         return node.parentNode;
     }
 

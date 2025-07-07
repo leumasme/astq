@@ -46,7 +46,7 @@ export default class ASTQAdapterParse5 implements ASTQAdapterInterface {
                 node.nodeName !== "");
     }
 
-    static getParentNode(node: Parse5Node, type?: string): Parse5Node | undefined {
+    static getParentNode(node: Parse5Node): Parse5Node | undefined {
         return node.parentNode;
     }
 

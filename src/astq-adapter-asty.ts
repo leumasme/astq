@@ -38,7 +38,7 @@ export default class ASTQAdapterASTY implements ASTQAdapterInterface {
         return (typeof node === "object" && node !== null && typeof node.ASTy === "boolean");
     }
 
-    static getParentNode(node: ASTYNode, type?: string): ASTYNode | null {
+    static getParentNode(node: ASTYNode): ASTYNode | null {
         return node.parent();
     }
 

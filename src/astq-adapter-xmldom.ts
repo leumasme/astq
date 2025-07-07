@@ -34,7 +34,7 @@ export default class ASTQAdapterXMLDOM implements ASTQAdapterInterface {
                 typeof node.nodeName === "string");
     }
 
-    static getParentNode(node: Node, type?: string): Node | null {
+    static getParentNode(node: Node): Node | null {
         return node.parentNode;
     }
 

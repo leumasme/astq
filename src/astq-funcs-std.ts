@@ -24,12 +24,12 @@
 
 import { ASTQAdapterInterface } from "./astq.js";
 
-const pos = (A: ASTQAdapterInterface, T: any): number => {
-    const parent = A.getParentNode(T, "*");
+const pos = (A: ASTQAdapterInterface, T: any, axis: string = "*"): number => {
+    const parent = A.getParentNode(T);
     if (parent === null) {
         return 1;
     }
-    const pchilds = A.getChildNodes(parent, "*");
+    const pchilds = A.getChildNodes(parent, axis);
     for (let i = 0; i < pchilds.length; i++) {
         if (pchilds[i] === T) {
             return (i + 1);
@@ -41,42 +41,42 @@ const pos = (A: ASTQAdapterInterface, T: any): number => {
 const parents = (A: ASTQAdapterInterface, T: any): any[] => {
     const parentNodes: any[] = [];
     let node = T;
-    while ((node = A.getParentNode(node, "*")) !== null) {
+    while ((node = A.getParentNode(node)) !== null) {
         parentNodes.push(node);
     }
     return parentNodes;
 };
 
 const stdfuncs: { [name: string]: (...args: any[]) => any } = {
-    "type": (A: ASTQAdapterInterface, T: any): string => {
+    "type": (A: ASTQAdapterInterface, T: any, axis: string): string => {
         return A.getNodeType(T);
     },
 
-    "attrs": (A: ASTQAdapterInterface, T: any, sep?: string): string => {
+    "attrs": (A: ASTQAdapterInterface, T: any, axis: string, sep?: string): string => {
         if (sep === undefined) {
             sep = " ";
         }
         return sep + A.getNodeAttrNames(T).join(sep) + sep;
     },
 
-    "depth": (A: ASTQAdapterInterface, T: any): number => {
+    "depth": (A: ASTQAdapterInterface, T: any, axis: string): number => {
         let depth = 1;
         let node = T;
-        while ((node = A.getParentNode(node, "*")) !== null) {
+        while ((node = A.getParentNode(node)) !== null) {
             depth++;
         }
         return depth;
     },
 
-    "pos": (A: ASTQAdapterInterface, T: any): number => {
-        return pos(A, T);
+    "pos": (A: ASTQAdapterInterface, T: any, axis: string): number => {
+        return pos(A, T, axis);
     },
 
-    "nth": (A: ASTQAdapterInterface, T: any, num: number | string): boolean => {
+    "nth": (A: ASTQAdapterInterface, T: any, axis: string, num: number | string): boolean => {
         let numValue = parseInt(String(num), 10);
-        const parent = A.getParentNode(T, "*");
+        const parent = A.getParentNode(T);
         if (parent !== null) {
-            const pchilds = A.getChildNodes(parent, "*");
+            const pchilds = A.getChildNodes(parent, axis);
             if (numValue < 0) {
                 numValue = pchilds.length - (numValue + 1);
             }
@@ -93,15 +93,15 @@ const stdfuncs: { [name: string]: (...args: any[]) => any } = {
         }
     },
 
-    "first": (A: ASTQAdapterInterface, T: any): boolean => {
-        return stdfuncs.nth(A, T, 1);
+    "first": (A: ASTQAdapterInterface, T: any, axis: string): boolean => {
+        return stdfuncs.nth(A, T, axis, 1);
     },
 
-    "last": (A: ASTQAdapterInterface, T: any): boolean => {
-        return stdfuncs.nth(A, T, -1);
+    "last": (A: ASTQAdapterInterface, T: any, axis: string): boolean => {
+        return stdfuncs.nth(A, T, axis, -1);
     },
 
-    "count": (A: ASTQAdapterInterface, T: any, val: any): number => {
+    "count": (A: ASTQAdapterInterface, T: any, axis: string, val: any): number => {
         if (typeof val === "object" && val instanceof Array) {
             return val.length;
         } else if (typeof val === "object") {
@@ -113,12 +113,12 @@ const stdfuncs: { [name: string]: (...args: any[]) => any } = {
         }
     },
 
-    "below": (A: ASTQAdapterInterface, T: any, other: any): boolean => {
+    "below": (A: ASTQAdapterInterface, T: any, axis: string, other: any): boolean => {
         if (!A.taste(other)) {
             throw new Error("invalid argument to function \"below\" (node expected)");
         }
         let node = T;
-        while ((node = A.getParentNode(node, "*")) !== null) {
+        while ((node = A.getParentNode(node)) !== null) {
             if (node === other) {
                 return true;
             }
@@ -126,7 +126,7 @@ const stdfuncs: { [name: string]: (...args: any[]) => any } = {
         return false;
     },
 
-    "follows": (A: ASTQAdapterInterface, T: any, other: any): boolean => {
+    "follows": (A: ASTQAdapterInterface, T: any, axis: string, other: any): boolean => {
         if (!A.taste(other)) {
             throw new Error("invalid argument to function \"follows\" (node expected)");
         }
@@ -151,11 +151,11 @@ const stdfuncs: { [name: string]: (...args: any[]) => any } = {
                 return false;
             }
         } else {
-            return pos(A, pathOfT[i]) > pos(A, pathOfOther[i]);
+            return pos(A, pathOfT[i], axis) > pos(A, pathOfOther[i], axis);
         }
     },
 
-    "in": (A: ASTQAdapterInterface, T: any, val: any): boolean => {
+    "in": (A: ASTQAdapterInterface, T: any, axis: string, val: any): boolean => {
         if (!(typeof val === "object" && val instanceof Array)) {
             throw new Error("invalid argument to function \"in\" (array expected)");
         }
@@ -167,23 +167,23 @@ const stdfuncs: { [name: string]: (...args: any[]) => any } = {
         return false;
     },
 
-    "substr": (A: ASTQAdapterInterface, T: any, str: any, pos: number, len: number): string => {
+    "substr": (A: ASTQAdapterInterface, T: any, axis: string, str: any, pos: number, len: number): string => {
         return String(str).substr(pos, len);
     },
 
-    "index": (A: ASTQAdapterInterface, T: any, str: any, sub: string, from?: number): number => {
+    "index": (A: ASTQAdapterInterface, T: any, axis: string, str: any, sub: string, from?: number): number => {
         return String(str).indexOf(sub, from);
     },
 
-    "trim": (A: ASTQAdapterInterface, T: any, str: any): string => {
+    "trim": (A: ASTQAdapterInterface, T: any, axis: string, str: any): string => {
         return String(str).trim();
     },
 
-    "lc": (A: ASTQAdapterInterface, T: any, str: any): string => {
+    "lc": (A: ASTQAdapterInterface, T: any, axis: string, str: any): string => {
         return String(str).toLowerCase();
     },
 
-    "uc": (A: ASTQAdapterInterface, T: any, str: any): string => {
+    "uc": (A: ASTQAdapterInterface, T: any, axis: string, str: any): string => {
         return String(str).toUpperCase();
     }
 };

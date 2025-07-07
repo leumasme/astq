@@ -38,7 +38,7 @@ export default class ASTQAdapterGraphQL implements ASTQAdapterInterface {
                 node.kind !== "");
     }
 
-    static getParentNode(node: GraphQLNode, type?: string): any {
+    static getParentNode(node: GraphQLNode): any {
         throw new Error("GraphQL AST does not support parent node traversal");
     }
 

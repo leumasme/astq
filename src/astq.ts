@@ -51,7 +51,7 @@ export interface ASTQParams {
 
 export interface ASTQAdapterInterface {
     taste(node: any): boolean;
-    getParentNode(node: any, type?: string): any;
+    getParentNode(node: any): any;
     getChildNodes(node: any, type?: string): any[];
     getNodeType(node: any): string;
     getNodeAttrNames(node: any): string[];

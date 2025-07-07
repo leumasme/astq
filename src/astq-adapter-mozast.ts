@@ -39,10 +39,7 @@ export default class ASTQAdapterMozAST implements ASTQAdapterInterface {
                 node.type !== "");
     }
 
-    static getParentNode(node: MozASTNode, type?: string): MozASTNode {
-        if (type !== "*" && type !== "parent") {
-            throw new Error(`no such axis named "${type}" for walking to parent nodes`);
-        }
+    static getParentNode(node: MozASTNode): MozASTNode {
         if (typeof node.parent !== "undefined") {
             return node.parent;
         } else {

@@ -29,7 +29,7 @@ export default class ASTQAdapterJSON implements ASTQAdapterInterface {
         return (typeof node === "object" && node !== null);
     }
 
-    static getParentNode(node: any, type?: string): any {
+    static getParentNode(node: any): any {
         throw new Error("JSON does not support parent node traversal");
     }
 

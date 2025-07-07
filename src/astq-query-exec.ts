@@ -27,11 +27,17 @@ import { ASTQAdapterInterface, ASTQParams } from "./astq.js";
 import ASTQFuncs from "./astq-funcs.js";
 import ASTQQueryTrace from "./astq-query-trace.js";
 
+interface AxisContext {
+    node: any;
+    axis: string;
+}
+
 export default class ASTQQueryExec extends ASTQQueryTrace {
     private adapter: ASTQAdapterInterface;
     private params: ASTQParams;
     private funcs: ASTQFuncs;
     private trace: boolean;
+    private contextStack: AxisContext[];
 
     constructor(adapter: ASTQAdapterInterface, params: ASTQParams, funcs: ASTQFuncs, trace?: boolean) {
         super();
@@ -39,6 +45,7 @@ export default class ASTQQueryExec extends ASTQQueryTrace {
         this.params = params;
         this.funcs = funcs;
         this.trace = trace || false;
+        this.contextStack = [];
     }
 
     execQuery(Q: any, T: any): any[] {
@@ -99,15 +106,22 @@ export default class ASTQQueryExec extends ASTQQueryTrace {
 
         // helper function for matching and taking node
         let id = match.get("id");
+        let currentAxis = axis ? axis.get("type") || "*" : "*";
         let matchAndTake = (T: any) => {
             let type = this.adapter.getNodeType(T);
             if (id === "*" || id === type) {
                 let take = true;
-                if (filter !== null)
+                if (filter !== null) {
+                    // Push current axis context before evaluating filter
+                    this.contextStack.push({ node: T, axis: currentAxis });
                     if (!this.execFilter(filter, T))
                         take = false;
-                if (take)
+                    // Pop context after filter evaluation
+                    this.contextStack.pop();
+                }
+                if (take) {
                     nodes.push(T);
+                }
             }
         };
 
@@ -143,7 +157,7 @@ export default class ASTQQueryExec extends ASTQQueryTrace {
             }
             else if (op === "-/") {
                 // direct left sibling
-                let parent = this.adapter.getParentNode(T, "*");
+                let parent = this.adapter.getParentNode(T);
                 if (parent !== null) {
                     let pchilds = this.adapter.getChildNodes(parent, t);
                     let leftSibling = null;
@@ -158,7 +172,7 @@ export default class ASTQQueryExec extends ASTQQueryTrace {
             }
             else if (op === "-//") {
                 // transitive left siblings
-                let parent = this.adapter.getParentNode(T, "*");
+                let parent = this.adapter.getParentNode(T);
                 if (parent !== null) {
                     let pchilds = this.adapter.getChildNodes(parent, t);
                     let i = 0;
@@ -171,7 +185,7 @@ export default class ASTQQueryExec extends ASTQQueryTrace {
             }
             else if (op === "+/") {
                 // direct right sibling
-                let parent = this.adapter.getParentNode(T, "*");
+                let parent = this.adapter.getParentNode(T);
                 if (parent !== null) {
                     let pchilds = this.adapter.getChildNodes(parent, t);
                     let i;
@@ -184,7 +198,7 @@ export default class ASTQQueryExec extends ASTQQueryTrace {
             }
             else if (op === "+//") {
                 // transitive right siblings
-                let parent = this.adapter.getParentNode(T, "*");
+                let parent = this.adapter.getParentNode(T);
                 if (parent !== null) {
                     let pchilds = this.adapter.getChildNodes(parent, t);
                     let i;
@@ -198,7 +212,7 @@ export default class ASTQQueryExec extends ASTQQueryTrace {
             }
             else if (op === "~/") {
                 // direct left and right sibling
-                let parent = this.adapter.getParentNode(T, "*");
+                let parent = this.adapter.getParentNode(T);
                 if (parent !== null) {
                     let pchilds = this.adapter.getChildNodes(parent, t);
                     let i;
@@ -213,7 +227,7 @@ export default class ASTQQueryExec extends ASTQQueryTrace {
             }
             else if (op === "~//") {
                 // transitive left and right siblings
-                let parent = this.adapter.getParentNode(T, "*");
+                let parent = this.adapter.getParentNode(T);
                 if (parent !== null) {
                     let pchilds = this.adapter.getChildNodes(parent, t);
                     for (let i = 0; i < pchilds.length; i++)
@@ -223,18 +237,25 @@ export default class ASTQQueryExec extends ASTQQueryTrace {
             }
             else if (op === "../") {
                 // direct parent
-                let parent = this.adapter.getParentNode(T, t);
-                if (parent !== null)
-                    matchAndTake(parent);
+                let parent = this.adapter.getParentNode(T);
+                if (parent !== null) {
+                    // If a specific type is requested, check if parent matches
+                    if (t === "*" || t === undefined || this.adapter.getNodeType(parent) === t) {
+                        matchAndTake(parent);
+                    }
+                }
             }
             else if (op === "..//") {
                 // transitive parents
                 let node = T;
                 for (;;) {
-                    let parent = this.adapter.getParentNode(node, t);
+                    let parent = this.adapter.getParentNode(node);
                     if (parent === null)
                         break;
-                    matchAndTake(parent);
+                    // If a specific type is requested, check if parent matches
+                    if (t === "*" || t === undefined || this.adapter.getNodeType(parent) === t) {
+                        matchAndTake(parent);
+                    }
                     node = parent;
                 }
             }
@@ -242,7 +263,7 @@ export default class ASTQQueryExec extends ASTQQueryTrace {
                 // transitive preceding nodes
                 let ctx = { sentinel: T, take: true };
                 for (;;) {
-                    let parent = this.adapter.getParentNode(T, "*");
+                    let parent = this.adapter.getParentNode(T);
                     if (parent === null)
                         break;
                     T = parent;
@@ -265,7 +286,7 @@ export default class ASTQQueryExec extends ASTQQueryTrace {
                 // transitive following nodes
                 let ctx = { sentinel: T, take: false };
                 for (;;) {
-                    let parent = this.adapter.getParentNode(T, "*");
+                    let parent = this.adapter.getParentNode(T);
                     if (parent === null)
                         break;
                     T = parent;
@@ -427,7 +448,15 @@ export default class ASTQQueryExec extends ASTQQueryTrace {
     execExprFuncCall(Q: any, T: any): any {
         this.traceBegin(Q, T);
         let id = Q.get("id");
-        let args = [this.adapter, T];
+        // Get current axis context
+        let currentAxis = "*";
+        if (this.contextStack.length > 0) {
+            let context = this.contextStack[this.contextStack.length - 1];
+            if (context.node === T) {
+                currentAxis = context.axis;
+            }
+        }
+        let args = [this.adapter, T, currentAxis];
         Q.childs().forEach((Q: any) => {
             args.push(this.execExpr(Q, T));
         });

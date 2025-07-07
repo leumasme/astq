@@ -41,7 +41,7 @@ export default class ASTQAdapterUniST implements ASTQAdapterInterface {
                 node.type !== "");
     }
 
-    static getParentNode(node: UniSTNode, type?: string): UniSTNode {
+    static getParentNode(node: UniSTNode): UniSTNode {
         if (typeof node.parent === "object" && node.parent !== null) {
             return node.parent;
         } else {
